@@ -6,9 +6,6 @@ extern crate structopt_derive;
 #[macro_use]
 extern crate failure;
 extern crate tabwriter;
-extern crate itertools;
-#[macro_use]
-extern crate if_chain;
 
 use failure::{Error, ResultExt};
 

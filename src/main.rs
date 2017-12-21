@@ -35,8 +35,8 @@ fn inner() -> cat::Result<()> {
   let mut stdin_lock = stdin.lock();
   let mut lock = BufWriter::with_capacity(BUFSIZE, stdout.lock());
 
+  let mut buf: [u8; BUFSIZE] = unsafe { uninitialized() };
   for file in &cli.files {
-    let mut buf: [u8; BUFSIZE] = unsafe { uninitialized() };
     let mut f: BufReader<Box<Read>> = BufReader::with_capacity(BUFSIZE, if file == "-" {
       box &mut stdin_lock
     } else {
