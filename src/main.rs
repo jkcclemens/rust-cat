@@ -5,7 +5,7 @@ extern crate structopt;
 
 use structopt::StructOpt;
 use cat::{Cli, Output};
-use std::io::{Read, BufRead, BufReader, BufWriter, stdin, stdout};
+use std::io::{Read, BufReader, BufWriter, stdin, stdout};
 use std::mem::uninitialized;
 
 // https://github.com/coreutils/coreutils/blob/master/src/ioblksize.h
@@ -22,25 +22,11 @@ fn main() {
   std::process::exit(code);
 }
 
-fn handle_stdin(cli: &Cli) -> cat::Result<()> {
-  let (stdin, stdout) = (stdin(), stdout());
-  let mut lock = BufReader::with_capacity(BUFSIZE, stdin.lock());
-  let mut stdout_lock = BufWriter::with_capacity(BUFSIZE, stdout.lock());
-  loop {
-    let mut line = Vec::new();
-    if lock.read_until(b'\n', &mut line)? == 0 {
-      break;
-    }
-    Output::new(cli, &line).write(&mut stdout_lock)?;
-  }
-  Ok(())
-}
-
 fn inner() -> cat::Result<()> {
-  let cli = Cli::from_args();
+  let mut cli = Cli::from_args();
 
   if cli.files.is_empty() {
-    return handle_stdin(&cli);
+    cli.files.push("-".into());
   }
 
   // FIXME(perf): process at same time as read, don't store contents and then process
@@ -51,11 +37,11 @@ fn inner() -> cat::Result<()> {
 
   for file in &cli.files {
     let mut buf: [u8; BUFSIZE] = unsafe { uninitialized() };
-    let mut f: Box<Read> = if file == "-" {
-      box BufReader::with_capacity(BUFSIZE, &mut stdin_lock)
+    let mut f: BufReader<Box<Read>> = BufReader::with_capacity(BUFSIZE, if file == "-" {
+      box &mut stdin_lock
     } else {
-      box BufReader::with_capacity(BUFSIZE, cat::open(file)?)
-    };
+      box cat::open(file)?
+    });
     loop {
       match f.read(&mut buf) {
         Ok(0) => break,

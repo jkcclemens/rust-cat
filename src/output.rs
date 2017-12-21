@@ -27,31 +27,26 @@ impl<'a, 'b> Output<'a, 'b> {
 }
 
 impl<'a, 'b> Output<'a, 'b> {
-  pub fn write<W: Write>(self, writer: W) -> Result<()> {
-    let mut tw = TabWriter::new(writer);
-    let inter: Box<Iterator<Item = Cow<'b, [u8]>>> = if self.cli.np_dollar {
-      box self.intersperse(Cow::Owned(vec![b'$']))
+  pub fn write<W: Write>(mut self, writer: W) -> Result<()> {
+    let mut tw: Box<Write> = if self.cli.simple() || (!self.cli.number_all_lines && !self.cli.number_non_blank_lines) {
+      box writer
     } else {
-      box self
+      box TabWriter::new(writer)
     };
-    for data in inter {
-      tw.write_all(&data)?;
+    while self.write_next_line(&mut tw)? != 0 {
     }
-    Ok(())
+    Ok(tw.flush()?)
   }
-}
 
-impl<'a, 'b> Iterator for Output<'a, 'b> {
-  type Item = Cow<'b, [u8]>;
-
-  fn next(&mut self) -> Option<Self::Item> {
+  fn write_next_line<W: Write>(&mut self, mut writer: W) -> Result<usize> {
     if self.cli.simple() && self.pos == 0 {
       self.pos = self.data.len();
-      return Some(Cow::Borrowed(self.data));
+      writer.write_all(self.data)?;
+      return Ok(self.pos);
     }
 
     if self.pos == self.data.len() {
-      return None;
+      return Ok(0);
     }
 
     let last_pos = self.pos;
@@ -64,67 +59,45 @@ impl<'a, 'b> Iterator for Output<'a, 'b> {
     if line.is_empty() {
       self.empty = (self.empty.1, true);
       if self.cli.squeeze_empty && self.empty.1 && self.empty.0 {
-        return self.next();
+        return self.write_next_line(writer);
       }
     } else {
       self.empty = (self.empty.1, false);
     }
 
-    let mut next_str = Vec::new();
+    let mut written = 0;
+
     // FIXME: numbers aren't right-aligned
     if self.cli.number_all_lines || self.cli.number_non_blank_lines && !line.is_empty() {
       self.line_count += 1;
-      next_str.extend(self.line_count.to_string().into_bytes());
-      next_str.extend(b"\t");
+      let line_num = self.line_count.to_string().into_bytes();
+      writer.write_all(&line_num)?;
+      written += line_num.len();
+      writer.write_all(b"\t")?;
+      written += 1;
     }
-    if self.cli.np || self.cli.np_dollar || self.cli.np_tab {
-      next_str.extend(Sanitize::sanitize(self.cli.np_tab, line));
-    } else {
-      next_str.extend(line);
+    for &byte in line {
+      if_chain! {
+        if self.cli.np || self.cli.np_dollar || self.cli.np_tab;
+        if let Some(ctl) = get_control(self.cli.np_tab, byte);
+        then {
+          writer.write_all(&[b'^', ctl])?;
+          written += 2;
+        } else {
+          writer.write_all(&[byte])?;
+          written += 1;
+        }
+      }
     }
-    Some(Cow::Owned(next_str))
+    Ok(written)
   }
 }
 
-const ESCAPE_CODES: &[(u8, char)] = &[
-  (0, '@'),
-  (1, 'A'),
-  (2, 'B'),
-  (3, 'C'),
-  (4, 'D'),
-  (5, 'E'),
-  (6, 'F'),
-  (7, 'G'),
-  (8, 'H'),
-  (11, 'K'),
-  (12, 'L'),
-  (13, 'M'),
-  (14, 'N'),
-  (15, 'O'),
-  (16, 'P'),
-  (17, 'Q'),
-  (18, 'R'),
-  (19, 'S'),
-  (20, 'T'),
-  (21, 'U'),
-  (22, 'V'),
-  (23, 'W'),
-  (24, 'X'),
-  (25, 'Y'),
-  (26, 'Z'),
-  (27, '['),
-  (28, '\\'),
-  (29, ']'),
-  (30, '^'),
-  (31, '_'),
-  (127, '?'),
-];
-
-fn get_control(tabs: bool, byte: u8) -> Option<char> {
-  if tabs && byte == 9 {
-    return Some('I');
+fn get_control(tabs: bool, byte: u8) -> Option<u8> {
+  if !byte.is_ascii_control() || (byte == b'\t' && !tabs) {
+    return None;
   }
-  ESCAPE_CODES.iter().find(|&&(code, _)| code == byte).map(|&(_, x)| x)
+  Some(byte + 64)
 }
 
 struct Sanitize;
@@ -132,15 +105,10 @@ struct Sanitize;
 impl Sanitize {
   fn sanitize(tabs: bool, bytes: &[u8]) -> Vec<u8> {
     bytes.iter()
-    .flat_map(|x| if_chain! {
-        if x.is_ascii_control();
-        if let Some(ctl) = get_control(tabs, *x);
-        then {
-          vec![b'^', ctl as u8]
-        } else {
-          vec![*x]
-        }
+      .flat_map(|&x| match get_control(tabs, x) {
+        Some(ctl) => vec![b'^', ctl as u8],
+        None => vec![x]
       })
-    .collect()
+      .collect()
   }
 }
