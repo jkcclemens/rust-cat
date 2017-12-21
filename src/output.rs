@@ -1,58 +1,65 @@
 use cli::Cli;
 use Result;
 
-use std::io::{Write, stdout};
-use std::marker::PhantomData;
+use std::io::Write;
+use std::borrow::Cow;
 use tabwriter::TabWriter;
 use itertools::Itertools;
 
-pub struct Output<'a, L, S> {
+pub struct Output<'a, 'b> {
   cli: &'a Cli,
-  lines: L,
+  data: &'b [u8],
+  pos: usize,
   line_count: usize,
   empty: (bool, bool),
-  _phantom: PhantomData<S>
 }
 
-impl<'a, L, S> Output<'a, L, S> {
-  pub fn new(cli: &'a Cli, iter: L) -> Output<'a, L, S> {
+impl<'a, 'b> Output<'a, 'b> {
+  pub fn new(cli: &'a Cli, data: &'b [u8]) -> Output<'a, 'b> {
     Output {
       cli,
-      lines: iter,
+      data,
+      pos: 0,
       line_count: 0,
-      empty: (false, false),
-      _phantom: PhantomData
+      empty: (false, false)
     }
   }
 }
 
-impl<'a, L, S> Output<'a, L, S>
-  where L: Iterator<Item = S>,
-        S: AsRef<[u8]>
-{
-  pub fn write_to_stdout(self) -> Result<()> {
-    let stdout = stdout();
-    let mut tw = TabWriter::new(stdout.lock());
-    let inter = if self.cli.np_dollar { vec![b'$', b'\n'] } else { vec![b'\n'] };
-    for data in self.intersperse(inter) {
+impl<'a, 'b> Output<'a, 'b> {
+  pub fn write<W: Write>(self, writer: W) -> Result<()> {
+    let mut tw = TabWriter::new(writer);
+    let inter: Box<Iterator<Item = Cow<'b, [u8]>>> = if self.cli.np_dollar {
+      box self.intersperse(Cow::Owned(vec![b'$']))
+    } else {
+      box self
+    };
+    for data in inter {
       tw.write_all(&data)?;
     }
-    Ok(tw.flush()?)
+    Ok(())
   }
 }
 
-impl<'a, L, S> Iterator for Output<'a, L, S>
-  where L: Iterator<Item = S>,
-        S: AsRef<[u8]>
-{
-  type Item = Vec<u8>;
+impl<'a, 'b> Iterator for Output<'a, 'b> {
+  type Item = Cow<'b, [u8]>;
 
   fn next(&mut self) -> Option<Self::Item> {
-    let line = match self.lines.next() {
-      Some(l) => l,
-      None => return None
+    if self.cli.simple() && self.pos == 0 {
+      self.pos = self.data.len();
+      return Some(Cow::Borrowed(self.data));
+    }
+
+    if self.pos == self.data.len() {
+      return None;
+    }
+
+    let last_pos = self.pos;
+    self.pos = match self.data[last_pos + 1..].iter().position(|x| x == &b'\n') {
+      Some(p) => self.pos + 1 + p,
+      None => self.data.len()
     };
-    let line = line.as_ref();
+    let line = &self.data[last_pos..self.pos];
 
     if line.is_empty() {
       self.empty = (self.empty.1, true);
@@ -75,7 +82,7 @@ impl<'a, L, S> Iterator for Output<'a, L, S>
     } else {
       next_str.extend(line);
     }
-    Some(next_str)
+    Some(Cow::Owned(next_str))
   }
 }
 

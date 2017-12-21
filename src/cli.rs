@@ -17,3 +17,9 @@ pub struct Cli {
   #[structopt]
   pub files: Vec<String>
 }
+
+impl Cli {
+  pub fn simple(&self) -> bool {
+    !self.number_non_blank_lines && !self.np_dollar && !self.number_non_blank_lines && !self.squeeze_empty && !self.np_tab && !self.np
+  }
+}
