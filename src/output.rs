@@ -68,38 +68,38 @@ impl<'a, 'b> Output<'a, 'b> {
     next.push(b'\t');
   }
 
-#[inline(always)]
-fn get_control(&self, tabs: bool, byte: u8, next: &mut Vec<u8>) {
-  if byte < 32 {
-    if byte == b'\n' || byte == b'\t' && !tabs {
-      next.push(byte);
-    } else {
-      next.push(b'^');
-      next.push(byte + 64);
-    }
-    return;
-  }
-  if byte < 127 {
-    next.push(byte);
-  } else if byte == 127 {
-    next.push(b'^');
-    next.push(b'?');
-  } else {
-    next.push(b'M');
-    next.push(b'-');
-    if byte >= 128 + 32 {
-      if byte < 128 + 127 {
-        next.push(byte - 128);
+  #[inline(always)]
+  fn get_control(&self, tabs: bool, byte: u8, next: &mut Vec<u8>) {
+    if byte < 32 {
+      if byte == b'\n' || byte == b'\t' && !tabs {
+        next.push(byte);
       } else {
         next.push(b'^');
-        next.push(b'?');
+        next.push(byte + 64);
       }
-    } else {
+      return;
+    }
+    if byte < 127 {
+      next.push(byte);
+    } else if byte == 127 {
       next.push(b'^');
-      next.push(byte - 128 + 64);
+      next.push(b'?');
+    } else {
+      next.push(b'M');
+      next.push(b'-');
+      if byte >= 128 + 32 {
+        if byte < 128 + 127 {
+          next.push(byte - 128);
+        } else {
+          next.push(b'^');
+          next.push(b'?');
+        }
+      } else {
+        next.push(b'^');
+        next.push(byte - 128 + 64);
+      }
     }
   }
-}
 
   fn empty(&self) -> bool {
     self.newlines.0 && self.newlines.1
