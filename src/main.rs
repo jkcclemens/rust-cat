@@ -29,8 +29,6 @@ fn inner() -> cat::Result<()> {
     cli.files.push("-".into());
   }
 
-  // FIXME(perf): process at same time as read, don't store contents and then process
-
   let (stdin, stdout) = (stdin(), stdout());
   let mut stdin_lock = stdin.lock();
   let mut lock = BufWriter::with_capacity(BUFSIZE, stdout.lock());
