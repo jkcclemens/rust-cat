@@ -1,4 +1,5 @@
 #![feature(box_syntax)]
+#![cfg_attr(feature = "cargo-clippy", allow(inline_always))]
 
 extern crate structopt;
 #[macro_use]
