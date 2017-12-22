@@ -86,7 +86,7 @@ impl<'a, 'b> Output<'a, 'b> {
       self.line_num_print -= 1;
     }
     for &b in &self.line_count_buf[self.line_num_print..self.line_num_end + 1] {
-      next.push(b as u8);
+      next.push(b);
     }
     next.push(b'\t');
   }
