@@ -51,7 +51,7 @@ impl<'a, 'b> Output<'a, 'b> {
         next.push(b'$');
       }
       if non_printing {
-        get_control(self.cli.np_tab, byte, &mut next);
+        self.get_control(self.cli.np_tab, byte, &mut next);
       } else {
         next.push(byte);
       }
@@ -68,12 +68,8 @@ impl<'a, 'b> Output<'a, 'b> {
     next.push(b'\t');
   }
 
-  fn empty(&self) -> bool {
-    self.newlines.0 && self.newlines.1
-  }
-}
-
-fn get_control(tabs: bool, byte: u8, next: &mut Vec<u8>) {
+#[inline(always)]
+fn get_control(&self, tabs: bool, byte: u8, next: &mut Vec<u8>) {
   if byte < 32 {
     if byte == b'\n' || byte == b'\t' && !tabs {
       next.push(byte);
@@ -102,5 +98,10 @@ fn get_control(tabs: bool, byte: u8, next: &mut Vec<u8>) {
       next.push(b'^');
       next.push(byte - 128 + 64);
     }
+  }
+}
+
+  fn empty(&self) -> bool {
+    self.newlines.0 && self.newlines.1
   }
 }
