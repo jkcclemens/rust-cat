@@ -5,7 +5,7 @@ extern crate structopt;
 
 use structopt::StructOpt;
 use cat::{Cli, Output};
-use std::io::{Read, BufReader, BufWriter, stdin, stdout};
+use std::io::{Read, BufReader, stdin, stdout};
 use std::mem::uninitialized;
 
 // https://github.com/coreutils/coreutils/blob/master/src/ioblksize.h
@@ -31,16 +31,16 @@ fn inner() -> cat::Result<()> {
 
   let (stdin, stdout) = (stdin(), stdout());
   let mut stdin_lock = stdin.lock();
-  let mut lock = BufWriter::with_capacity(BUFSIZE, stdout.lock());
+  let mut lock = stdout.lock();
 
   let mut buf: [u8; BUFSIZE] = unsafe { uninitialized() };
   let mut next_line: [u8; BUFSIZE * 4 + 20] = unsafe { uninitialized() };
   for file in &cli.files {
-    let mut f: BufReader<Box<Read>> = BufReader::with_capacity(BUFSIZE, if file == "-" {
+    let mut f: Box<Read> = if file == "-" {
       box &mut stdin_lock
     } else {
-      box cat::open(file)?
-    });
+      box BufReader::with_capacity(BUFSIZE, cat::open(file)?)
+    };
     loop {
       match f.read(&mut buf) {
         Ok(0) => break,
