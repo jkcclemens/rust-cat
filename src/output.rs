@@ -61,8 +61,7 @@ impl<'a, 'b> Output<'a, 'b> {
         next.push(byte);
       }
     }
-    writer.write_all(&next)?;
-    Ok(writer.flush()?)
+    Ok(writer.write_all(&next)?)
   }
 
   fn number_line(&mut self, next: &mut Vec<u8>) {
