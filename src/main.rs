@@ -34,6 +34,7 @@ fn inner() -> cat::Result<()> {
   let mut lock = BufWriter::with_capacity(BUFSIZE, stdout.lock());
 
   let mut buf: [u8; BUFSIZE] = unsafe { uninitialized() };
+  let mut next_line: [u8; BUFSIZE * 4 + 20] = unsafe { uninitialized() };
   for file in &cli.files {
     let mut f: BufReader<Box<Read>> = BufReader::with_capacity(BUFSIZE, if file == "-" {
       box &mut stdin_lock
@@ -44,7 +45,7 @@ fn inner() -> cat::Result<()> {
       match f.read(&mut buf) {
         Ok(0) => break,
         Ok(i) => {
-          Output::new(&cli, &buf[..i]).write(&mut lock)?;
+          Output::new(&cli, &buf[..i]).write(&mut lock, &mut next_line)?;
         },
         Err(e) => return Err(e.into())
       }

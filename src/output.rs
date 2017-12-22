@@ -17,7 +17,8 @@ pub struct Output<'a, 'b> {
   line_num_print: usize,
   line_num_start: usize,
   line_num_end: usize,
-  newlines: (bool, bool)
+  newlines: (bool, bool),
+  pos: usize
 }
 
 impl<'a, 'b> Output<'a, 'b> {
@@ -29,19 +30,25 @@ impl<'a, 'b> Output<'a, 'b> {
       line_num_print: LINE_COUNT_BUF_LEN - 8,
       line_num_start: LINE_COUNT_BUF_LEN - 3,
       line_num_end: LINE_COUNT_BUF_LEN - 3,
-      newlines: (false, true)
+      newlines: (false, true),
+      pos: 0
     }
   }
 }
 
 impl<'a, 'b> Output<'a, 'b> {
-  pub fn write<W: Write>(mut self, mut writer: W) -> Result<()> {
+  #[inline(always)]
+  fn next(&mut self, next_line: &mut [u8], b: u8) {
+    next_line[self.pos] = b;
+    self.pos += 1;
+  }
+
+  pub fn write<W: Write>(mut self, mut writer: W, next: &mut [u8]) -> Result<()> {
     if self.cli.simple() {
       writer.write_all(self.data)?;
       return Ok(());
     }
     let non_printing = self.cli.non_printing();
-    let mut next = Vec::with_capacity(self.data.len() * 2);
     for &byte in self.data {
       let line_break = byte == b'\n';
       if self.cli.squeeze_empty && line_break && self.empty() {
@@ -50,21 +57,21 @@ impl<'a, 'b> Output<'a, 'b> {
       self.newlines = (self.newlines.1, line_break);
 
       if self.newlines.0 && (self.cli.number_all_lines || self.cli.number_non_blank_lines && !self.empty()) {
-        self.number_line(&mut next);
+        self.number_line(next);
       }
       if self.cli.np_dollar && line_break {
-        next.push(b'$');
+        self.next(next, b'$');
       }
       if non_printing {
-        self.get_control(self.cli.np_tab, byte, &mut next);
+        self.get_control(self.cli.np_tab.clone(), byte, next);
       } else {
-        next.push(byte);
+        self.next(next, byte);
       }
     }
-    Ok(writer.write_all(&next)?)
+    Ok(writer.write_all(&next[..self.pos])?)
   }
 
-  fn number_line(&mut self, next: &mut Vec<u8>) {
+  fn number_line(&mut self, next: &mut [u8]) {
     let mut endp = self.line_num_end;
     loop {
       if self.line_count_buf[endp] < b'9' {
@@ -85,40 +92,41 @@ impl<'a, 'b> Output<'a, 'b> {
       self.line_num_print -= 1;
     }
     for &b in &self.line_count_buf[self.line_num_print..self.line_num_end + 1] {
-      next.push(b);
+      next[self.pos] = b;
+      self.pos += 1;
     }
-    next.push(b'\t');
+    self.next(next, b'\t');
   }
 
   #[inline(always)]
-  fn get_control(&self, tabs: bool, byte: u8, next: &mut Vec<u8>) {
+  fn get_control(&mut self, tabs: bool, byte: u8, next: &mut [u8]) {
     if byte < 32 {
       if byte == b'\n' || byte == b'\t' && !tabs {
-        next.push(byte);
+        self.next(next, byte);
       } else {
-        next.push(b'^');
-        next.push(byte + 64);
+        self.next(next, b'^');
+        self.next(next, byte + 64);
       }
       return;
     }
     if byte < 127 {
-      next.push(byte);
+      self.next(next, byte);
     } else if byte == 127 {
-      next.push(b'^');
-      next.push(b'?');
+      self.next(next, b'^');
+      self.next(next, b'?');
     } else {
-      next.push(b'M');
-      next.push(b'-');
+      self.next(next, b'M');
+      self.next(next, b'-');
       if byte >= 128 + 32 {
         if byte < 128 + 127 {
-          next.push(byte - 128);
+          self.next(next, byte - 128);
         } else {
-          next.push(b'^');
-          next.push(b'?');
+          self.next(next, b'^');
+          self.next(next, b'?');
         }
       } else {
-        next.push(b'^');
-        next.push(byte - 128 + 64);
+        self.next(next, b'^');
+        self.next(next, byte - 128 + 64);
       }
     }
   }
