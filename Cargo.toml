@@ -7,4 +7,3 @@ authors = ["Kyle Clemens <jkc.clemens@gmail.com>"]
 structopt = "0.1"
 structopt-derive = "0.1"
 failure = "0.1"
-tabwriter = "1.0"

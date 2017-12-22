@@ -6,7 +6,6 @@ extern crate structopt;
 extern crate structopt_derive;
 #[macro_use]
 extern crate failure;
-extern crate tabwriter;
 
 use failure::{Error, ResultExt};
 

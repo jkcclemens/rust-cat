@@ -20,7 +20,7 @@ pub struct Cli {
 
 impl Cli {
   pub fn simple(&self) -> bool {
-    !self.number_non_blank_lines && !self.np_dollar && !self.number_non_blank_lines && !self.squeeze_empty && !self.np_tab && !self.np
+    !self.number_all_lines && !self.np_dollar && !self.number_non_blank_lines && !self.squeeze_empty && !self.np_tab && !self.np
   }
 
   pub fn non_printing(&self) -> bool {

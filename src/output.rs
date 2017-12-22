@@ -2,12 +2,21 @@ use cli::Cli;
 use Result;
 
 use std::io::Write;
-use tabwriter::TabWriter;
+
+const LINE_COUNT_BUF_LEN: usize = 20;
+const LINE_COUNT_BUF: [u8; LINE_COUNT_BUF_LEN] = [
+  b' ', b' ', b' ', b' ', b' ', b' ', b' ', b' ', b' ',
+  b' ', b' ', b' ', b' ', b' ', b' ', b' ', b' ', b'0',
+  b'\t', b'\0'
+];
 
 pub struct Output<'a, 'b> {
   cli: &'a Cli,
   data: &'b [u8],
-  line_count: usize,
+  line_count_buf: [u8; LINE_COUNT_BUF_LEN],
+  line_num_print: usize,
+  line_num_start: usize,
+  line_num_end: usize,
   newlines: (bool, bool)
 }
 
@@ -16,8 +25,11 @@ impl<'a, 'b> Output<'a, 'b> {
     Output {
       cli,
       data,
-      line_count: 0,
-      newlines: (false, false)
+      line_count_buf: LINE_COUNT_BUF,
+      line_num_print: LINE_COUNT_BUF_LEN - 8,
+      line_num_start: LINE_COUNT_BUF_LEN - 3,
+      line_num_end: LINE_COUNT_BUF_LEN - 3,
+      newlines: (false, true)
     }
   }
 }
@@ -28,12 +40,6 @@ impl<'a, 'b> Output<'a, 'b> {
       writer.write_all(self.data)?;
       return Ok(());
     }
-    // TODO: Don't use TabWriter (it's very, very, very slow)
-    let mut writer: Box<Write> = if self.cli.number_lines() {
-      box TabWriter::new(writer)
-    } else {
-      box writer
-    };
     let non_printing = self.cli.non_printing();
     let mut next = Vec::with_capacity(self.data.len() * 2);
     for &byte in self.data {
@@ -43,8 +49,7 @@ impl<'a, 'b> Output<'a, 'b> {
       }
       self.newlines = (self.newlines.1, line_break);
 
-      // FIXME: numbers aren't right-aligned
-      if self.cli.number_all_lines || self.cli.number_non_blank_lines && !self.empty() {
+      if self.newlines.0 && (self.cli.number_all_lines || self.cli.number_non_blank_lines && !self.empty()) {
         self.number_line(&mut next);
       }
       if self.cli.np_dollar && line_break {
@@ -61,9 +66,27 @@ impl<'a, 'b> Output<'a, 'b> {
   }
 
   fn number_line(&mut self, next: &mut Vec<u8>) {
-    self.line_count += 1;
-    for b in self.line_count.to_string().into_bytes() {
-      next.push(b);
+    let mut endp = self.line_num_end;
+    loop {
+      if self.line_count_buf[endp] < b'9' {
+        self.line_count_buf[endp] += 1;
+        break;
+      }
+      self.line_count_buf[endp] = b'0';
+      endp -= 1;
+      if endp < self.line_num_start {
+        break;
+      }
+    }
+    if self.line_num_start > endp {
+      self.line_num_start -= 1;
+      self.line_count_buf[self.line_num_start] = b'1';
+    }
+    if self.line_num_start < self.line_num_print {
+      self.line_num_print -= 1;
+    }
+    for &b in &self.line_count_buf[self.line_num_print..self.line_num_end + 1] {
+      next.push(b as u8);
     }
     next.push(b'\t');
   }
